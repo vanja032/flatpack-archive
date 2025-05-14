@@ -1,0 +1,4 @@
+.DS_Store
+build/
+resources/
+build_log.txt

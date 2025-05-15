@@ -68,6 +68,60 @@ The format is versioned and structured for forward compatibility. Future changes
 - Checksums or hash digests for integrity
 - Symbolic link or metadata support
 
+## Installation & Usage
+
+### Building the CLI
+
+You can build the CLI in one of two ways:
+
+#### Option 1: Manual CMake build
+
+```bash
+git clone https://github.com/vanja032/flatpack.git
+cd flatpack
+mkdir build && cd build
+cmake ..
+make
+```
+
+#### Option 2: Using build script
+
+```bash
+git clone https://github.com/vanja032/flatpack.git
+cd flatpack
+bash build.sh
+```
+
+### Installing the CLI
+
+After building, install the CLI tool system-wide:
+
+```bash
+bash install.sh
+```
+
+This installs the `flatpack` binary to `/usr/local/bin`.
+
+### Command-Line Usage
+
+To create an archive:
+
+```bash
+flatpack create -i ./my_folder -o backup.flatpack --compress --encrypt mypassword
+```
+
+To extract an archive:
+
+```bash
+flatpack extract -i backup.flatpack -o ./restored_folder --decrypt mypassword
+```
+
+For help:
+
+```bash
+flatpack --help
+```
+
 ## License
 
 This project is licensed under the MIT License.

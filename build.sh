@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e  # Stop on first error
+set -e  # Stop on error
 
 # Create build directory if it does not exist
 mkdir -p build
@@ -11,4 +11,4 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 
 # Build project
-cmake --build . > build_log.txt 2>&1
+cmake --build . # > build_log.txt 2>&1

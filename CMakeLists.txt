@@ -53,3 +53,8 @@ enable_testing()
 
 # Add test to ctest
 add_test(NAME FlatpackTest COMMAND archive_test)
+
+# Flatpack Cli
+add_executable(flatpack_cli tools/cli.cpp)
+target_include_directories(flatpack_cli PRIVATE include)
+target_link_libraries(flatpack_cli flatpack_archive)

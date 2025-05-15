@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e  # Exit on first error
+set -e  # Exit on error
 
 # Check if build directory exists
 if [ ! -d "build" ]; then

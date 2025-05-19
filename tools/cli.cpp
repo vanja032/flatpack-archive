@@ -1,6 +1,7 @@
 // cli.cpp
 
 #include "../include/flatpack_archive/archive.hpp"
+#include "../include/flatpack_archive/compression.hpp"
 
 #include <functional>
 #include <iostream>
@@ -17,24 +18,32 @@ void print_usage(std::string command = "") {
  |_|    |_|\__,_|\__| .__/ \__,_|\___|_|\_\ /_/    \_\_|  \___|_| |_|_| \_/ \___|    |_|\___/ \___/|_|
                     | |                                                                               
                     |_|                                                                               
-)" << "\nUsage:\n";
+)" << "\nUsage:\n\n";
 
   const std::string shared_create =
-      "\tflatpack create -i <input_folder> -o <output_file>\n"
-      "  \t\t[--compress | -c]\n"
-      "  \t\t[--encrypt <password> | -e <password>]\n";
+      " flatpack create -i <input_folder> -o <output_file>\n"
+      "  \t[-c | --compress][default: zlib] (optional - enables compression)\n"
+      "  \t[-a <compression_type> | --algo "
+      "<compression_type>][zlib/zstd/lz4/brotli] (optional - enables "
+      "compression algorithm)\n"
+      "  \t[-e <password> | --encrypt <password>] (optional - enables "
+      "encryption)\n"
+      "\n";
 
   const std::string shared_extract =
-      "\tflatpack extract -i <archive_file> -o <output_folder>\n"
-      "  \t\t[--decrypt <password> | -d <password>]\n";
+      " flatpack extract -i <archive_file> -o <output_folder>\n"
+      "  \t[-d <password> | --decrypt <password>] (optiona - enables "
+      "decryption)\n"
+      "\n";
+
+  const std::string help = " flatpack --help | -h\n";
 
   if (command == "create") {
     std::cout << shared_create << std::endl;
   } else if (command == "extract") {
     std::cout << shared_extract << std::endl;
   } else {
-    std::cout << shared_create << shared_extract << "\tflatpack --help | -h\n"
-              << std::endl;
+    std::cout << shared_create << shared_extract << help << std::endl;
   }
 }
 
@@ -47,6 +56,8 @@ int main(int argc, char *argv[]) {
 
   std::string command = argv[1];
   std::string input, output, password;
+  flatpack_archive::CompressionType compression_type =
+      flatpack_archive::CompressionType::None;
   bool compress = false, encrypt = false, decrypt = false, help = false;
 
   auto show_help = [](std::string cmd) {
@@ -87,8 +98,36 @@ int main(int argc, char *argv[]) {
          }
          output = argv[i];
        }},
-      {"-c", [&](int &) { compress = true; }},
-      {"--compress", [&](int &) { compress = true; }},
+      {"-c",
+       [&](int &) {
+         compress = true;
+         if (compression_type == flatpack_archive::CompressionType::None)
+           compression_type = flatpack_archive::CompressionType::Default;
+       }},
+      {"--compress",
+       [&](int &) {
+         compress = true;
+         if (compression_type == flatpack_archive::CompressionType::None)
+           compression_type = flatpack_archive::CompressionType::Default;
+       }},
+      {"-a",
+       [&](int &i) {
+         if (++i >= argc) {
+           std::cerr << "Missing argument for -a/--algo\n";
+           std::exit(1);
+         }
+         compress = true;
+         compression_type = flatpack_archive::parse_compression_type(argv[i]);
+       }},
+      {"--algo",
+       [&](int &i) {
+         if (++i >= argc) {
+           std::cerr << "Missing argument for -a/--algo\n";
+           std::exit(1);
+         }
+         compress = true;
+         compression_type = flatpack_archive::parse_compression_type(argv[i]);
+       }},
       {"-e",
        [&](int &i) {
          encrypt = true;
@@ -145,7 +184,7 @@ int main(int argc, char *argv[]) {
       show_help("create");
       return 0;
     }
-    flatpack_archive::create_archive(input, output);
+    flatpack_archive::create_archive(input, output, compression_type);
     std::cout << "Flatpack archive " << output << " created." << std::endl;
   } else if (command == "extract") {
     if (input.empty() || output.empty() || help) {

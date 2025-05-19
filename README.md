@@ -2,6 +2,29 @@
 
 Flatpack is a binary archive format that packages an entire directory tree—including files and folders—into a single `.flatpack` file. The archive is composed of three main sections stored sequentially:
 
+```
+  ______ _       _                    _                        _     _             _______          _
+ |  ____| |     | |                  | |        /\            | |   (_)           |__   __|        | |
+ | |__  | | __ _| |_ _ __   __ _  ___| | __    /  \   _ __ ___| |__  ___   _____     | | ___   ___ | |
+ |  __| | |/ _` | __| '_ \ / _` |/ __| |/ /   / /\ \ | '__/ __| '_ \| \ \ / / _ \    | |/ _ \ / _ \| |
+ | |    | | (_| | |_| |_) | (_| | (__|   <   / ____ \| | | (__| | | | |\ V /  __/    | | (_) | (_) | |
+ |_|    |_|\__,_|\__| .__/ \__,_|\___|_|\_\ /_/    \_\_|  \___|_| |_|_| \_/ \___|    |_|\___/ \___/|_|
+                    | |
+                    |_|
+
+Usage:
+
+ flatpack create -i <input_folder> -o <output_file>
+        [-c | --compress] [default: zlib]         (optional – enables compression)
+        [-a <compression_type> | --algo <type>]   (optional – select: zlib/zstd/lz4/brotli)
+        [-e <password> | --encrypt <password>]    (optional – enables encryption)
+
+ flatpack extract -i <archive_file> -o <output_folder>
+        [-d <password> | --decrypt <password>]    (optional – enables decryption)
+
+ flatpack --help | -h
+```
+
 1. Header
 2. File Table
 3. Raw Data Section
@@ -32,14 +55,16 @@ The **File Table** is an array of fixed-size entries. Each entry corresponds to 
 
 ### File Entry Layout
 
-| Field          | Size (bytes) | Description                                                |
-| -------------- | ------------ | ---------------------------------------------------------- |
-| `path`         | 256          | UTF-8 null-terminated relative path (zero-padded)          |
-| `offset`       | 8            | Offset (in bytes) to the start of the file data in archive |
-| `size`         | 8            | Number of bytes of file data (0 if entry is a directory)   |
-| `is_directory` | 1            | Flag (1 = directory, 0 = file)                             |
+| Field              | Size (bytes) | Description                                                                            |
+| ------------------ | ------------ | -------------------------------------------------------------------------------------- |
+| `path`             | 256          | UTF-8 null-terminated relative path (zero-padded)                                      |
+| `offset`           | 8            | Offset (in bytes) to the start of the file data in archive                             |
+| `size`             | 8            | Original uncompressed size (0 if entry is a directory)                                 |
+| `compressed_size`  | 8            | Compressed size of the file data                                                       |
+| `is_directory`     | 1            | Flag (1 = directory, 0 = file)                                                         |
+| `compression_type` | 1            | Compression type used (0 = None, 1 = Zlib, 2 = LZ4, 3 = Zstd, 4 = Brotli, 5 = Default) |
 
-**Total Per Entry: 273 bytes**
+**Total Per Entry: 282 bytes**
 
 Each file or folder is stored as a single entry in this section. Only file entries have valid `offset` and `size` fields. Directory entries do not reference any data in the raw data section.
 
@@ -107,13 +132,13 @@ This installs the `flatpack` binary to `/usr/local/bin`.
 To create an archive:
 
 ```bash
-flatpack create -i ./my_folder -o backup.flatpack --compress --encrypt mypassword
+flatpack create -i ./my_folder -o backup.flatpack -a brotli -e mypassword
 ```
 
 To extract an archive:
 
 ```bash
-flatpack extract -i backup.flatpack -o ./restored_folder --decrypt mypassword
+flatpack extract -i backup.flatpack -o ./restored_folder -d mypassword
 ```
 
 For help:
@@ -121,6 +146,17 @@ For help:
 ```bash
 flatpack --help
 ```
+
+### Supported Compression Types
+
+You can specify the compression algorithm using `--algo` or `-a`. The available options are:
+
+- `zlib`
+- `lz4`
+- `zstd`
+- `brotli`
+
+If no compression algorithm is specified for compression, files are stored compressed using **Default** algorithm _Zlib_.
 
 ## License
 

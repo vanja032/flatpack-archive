@@ -1,6 +1,7 @@
 // archive.cpp
 
 #include "flatpack_archive/archive.hpp"
+#include "flatpack_archive/compression.hpp"
 #include "flatpack_archive/file_table.hpp"
 #include "flatpack_archive/header.hpp"
 
@@ -12,7 +13,8 @@ namespace flatpack_archive {
 namespace fs = std::filesystem;
 
 void create_archive(const std::string &input_folder,
-                    const std::string &output_file) {
+                    const std::string &output_file,
+                    CompressionType compression_type) {
   std::ofstream out(output_file, std::ios::binary);
   if (!out) {
     throw new std::runtime_error("Failed to open archive file for writing");
@@ -31,6 +33,8 @@ void create_archive(const std::string &input_folder,
     fe.is_directory = entry.is_directory() ? 1 : 0;
     fe.offset = 0;
     fe.size = entry.is_regular_file() ? fs::file_size(entry.path()) : 0;
+    fe.compressed_size = 0;
+    fe.compression_type = CompressionType::None;
     file_table.add_entry(fe);
   }
 
@@ -47,7 +51,12 @@ void create_archive(const std::string &input_folder,
       fe.offset = static_cast<uint64_t>(out.tellp());
 
       std::ifstream in(fs::path(input_folder) / fe.path, std::ios::binary);
-      out << in.rdbuf();
+      std::vector<char> data(std::istreambuf_iterator<char>(in), {});
+      std::vector<char> compressed;
+      compress(data, compressed, compression_type);
+      fe.compressed_size = compressed.size();
+      fe.compression_type = compression_type;
+      out.write(compressed.data(), compressed.size());
     }
     updated_entries.push_back(fe);
   }
@@ -56,7 +65,6 @@ void create_archive(const std::string &input_folder,
   for (const auto &fe : updated_entries) {
     fe.write(out);
   }
-
   out.close();
 }
 
@@ -90,9 +98,13 @@ void extract_archive(const std::string &archive_file,
       }
 
       in.seekg(static_cast<std::streampos>(fe.offset));
-      std::vector<char> buffer(fe.size);
-      in.read(buffer.data(), buffer.size());
-      out_file.write(buffer.data(), buffer.size());
+
+      std::vector<char> compressed(fe.compressed_size);
+      in.read(compressed.data(), compressed.size());
+
+      std::vector<char> decompressed;
+      decompress(compressed, decompressed, fe.size, fe.compression_type);
+      out_file.write(decompressed.data(), decompressed.size());
     }
   }
 }

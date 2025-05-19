@@ -15,12 +15,17 @@ set(FLATPACK_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Compression libraries
+include_directories(/opt/homebrew/include)
+link_directories(/opt/homebrew/lib)
+
 # Add library target
 add_library(flatpack_archive STATIC
     src/archive.cpp
     src/file_table.cpp
     src/file_entry.cpp
     src/header.cpp
+    src/compression.cpp
 )
 
 # Include directories (for public headers)
@@ -35,6 +40,17 @@ target_compile_definitions(flatpack_archive
     FLATPACK_VERSION_MAJOR=${FLATPACK_VERSION_MAJOR}
     FLATPACK_VERSION_MINOR=${FLATPACK_VERSION_MINOR}
     FLATPACK_VERSION_PATCH=${FLATPACK_VERSION_PATCH}
+)
+
+# Link compression libraries to flatpack_archive
+target_link_libraries(flatpack_archive
+    PRIVATE
+    z
+    lz4
+    zstd
+    brotlienc
+    brotlidec
+    brotlicommon
 )
 
 # Add test executable
@@ -57,4 +73,13 @@ add_test(NAME FlatpackTest COMMAND archive_test)
 # Flatpack Cli
 add_executable(flatpack_cli tools/cli.cpp)
 target_include_directories(flatpack_cli PRIVATE include)
-target_link_libraries(flatpack_cli flatpack_archive)
+target_link_libraries(flatpack_cli
+    PRIVATE
+    flatpack_archive
+    z
+    lz4
+    zstd
+    brotlienc
+    brotlidec
+    brotlicommon
+)

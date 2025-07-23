@@ -2,11 +2,13 @@
 
 #include "flatpack_archive/archive.hpp"
 #include "flatpack_archive/compression.hpp"
+#include "flatpack_archive/encryption.hpp"
 #include "flatpack_archive/file_table.hpp"
 #include "flatpack_archive/header.hpp"
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 namespace flatpack_archive {
 
@@ -14,10 +16,13 @@ namespace fs = std::filesystem;
 
 void create_archive(const std::string &input_folder,
                     const std::string &output_file,
-                    CompressionType compression_type) {
+                    CompressionType compression_type,
+                    EncryptionType encryption_type,
+                    const std::string &password = "",
+                    const bool verbose = false) {
   std::ofstream out(output_file, std::ios::binary);
   if (!out) {
-    throw new std::runtime_error("Failed to open archive file for writing");
+    throw std::runtime_error("Failed to open archive file for writing");
   }
 
   FileTable file_table;
@@ -35,6 +40,7 @@ void create_archive(const std::string &input_folder,
     fe.size = entry.is_regular_file() ? fs::file_size(entry.path()) : 0;
     fe.compressed_size = 0;
     fe.compression_type = CompressionType::None;
+    fe.encryption_type = EncryptionType::None;
     file_table.add_entry(fe);
   }
 
@@ -52,11 +58,34 @@ void create_archive(const std::string &input_folder,
 
       std::ifstream in(fs::path(input_folder) / fe.path, std::ios::binary);
       std::vector<char> data(std::istreambuf_iterator<char>(in), {});
-      std::vector<char> compressed;
-      compress(data, compressed, compression_type);
-      fe.compressed_size = compressed.size();
-      fe.compression_type = compression_type;
-      out.write(compressed.data(), compressed.size());
+
+      std::vector<char> compressed_data;
+      if (!compress(data, compressed_data, compression_type)) {
+        compressed_data = data;
+      } else {
+        fe.compression_type = compression_type;
+        if (verbose) {
+          std::cout << "Compressed file: " << fe.path << " using "
+                    << static_cast<int>(compression_type) << "\n";
+        }
+      }
+
+      std::vector<char> encrypted_data;
+      if (encrypt(compressed_data, encrypted_data, encryption_type, password)) {
+        fe.encryption_type = encryption_type;
+        if (verbose) {
+          std::cout << "Encrypted file: " << fe.path << " using "
+                    << static_cast<int>(encryption_type) << "\n";
+        }
+      } else {
+        encrypted_data = compressed_data;
+      }
+
+      fe.compressed_size = encrypted_data.size();
+      out.write(encrypted_data.data(), encrypted_data.size());
+      if (verbose) {
+        std::cout << "Stored file in archive: " << fe.path << "\n";
+      }
     }
     updated_entries.push_back(fe);
   }
@@ -69,15 +98,17 @@ void create_archive(const std::string &input_folder,
 }
 
 void extract_archive(const std::string &archive_file,
-                     const std::string &output_folder) {
+                     const std::string &output_folder,
+                     const std::string &password = "",
+                     const bool verbose = false) {
   std::ifstream in(archive_file, std::ios::binary);
   if (!in) {
-    throw new std::runtime_error("Failed to open archive file for reading");
+    throw std::runtime_error("Failed to open archive file for reading");
   }
 
   ArchiveHeader header = ArchiveHeader::read(in);
   if (!header.is_valid()) {
-    throw new std::runtime_error("Invalid archive file format");
+    throw std::runtime_error("Invalid archive file format");
   }
 
   FileTable file_table = FileTable::read(in, header.file_count);
@@ -93,18 +124,58 @@ void extract_archive(const std::string &archive_file,
 
       std::ofstream out_file(out_path, std::ios::binary);
       if (!out_file) {
-        throw new std::runtime_error("Failed to create output file: " +
-                                     out_path.string());
+        throw std::runtime_error("Failed to create output file: " +
+                                 out_path.string());
       }
 
       in.seekg(static_cast<std::streampos>(fe.offset));
 
-      std::vector<char> compressed(fe.compressed_size);
-      in.read(compressed.data(), compressed.size());
+      std::vector<char> encrypted_data(fe.compressed_size);
+      in.read(encrypted_data.data(), encrypted_data.size());
 
-      std::vector<char> decompressed;
-      decompress(compressed, decompressed, fe.size, fe.compression_type);
-      out_file.write(decompressed.data(), decompressed.size());
+      // Check if we read the expected number of bytes
+      if (in.gcount() != static_cast<std::streamsize>(fe.compressed_size)) {
+        throw std::runtime_error(
+            "Failed to read expected number of bytes for file: " +
+            out_path.string() + " (expected " +
+            std::to_string(fe.compressed_size) + ", got " +
+            std::to_string(in.gcount()) + ")");
+      }
+      if (verbose) {
+        std::cout << "Read encrypted data for: " << fe.path << "\n";
+      }
+
+      std::vector<char> decrypted_data;
+      if (!decrypt(encrypted_data, decrypted_data, fe.encryption_type,
+                   password)) {
+        throw std::runtime_error("Failed to decrypt file: " +
+                                 out_path.string());
+      }
+      if (verbose) {
+        std::cout << "Decrypted file: " << fe.path << " using "
+                  << static_cast<int>(fe.encryption_type) << "\n";
+      }
+
+      if (decrypted_data.empty()) {
+        throw std::runtime_error("Decrypted data is empty for file: " +
+                                 out_path.string());
+      }
+
+      std::vector<char> decompressed_data;
+      if (!decompress(decrypted_data, decompressed_data, fe.size,
+                      fe.compression_type)) {
+        throw std::runtime_error("Failed to decompress file: " +
+                                 out_path.string());
+      }
+      if (verbose) {
+        std::cout << "Decompressed file: " << fe.path << " using "
+                  << static_cast<int>(fe.compression_type) << "\n";
+      }
+
+      out_file.write(decompressed_data.data(), decompressed_data.size());
+      if (verbose) {
+        std::cout << "Restored file: " << fe.path << "\n";
+      }
     }
   }
 }

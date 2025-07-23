@@ -26,14 +26,18 @@ void print_usage(std::string command = "") {
       "  \t[-a <compression_type> | --algo "
       "<compression_type>][zlib/zstd/lz4/brotli] (optional - enables "
       "compression algorithm)\n"
-      "  \t[-e <password> | --encrypt <password>] (optional - enables "
-      "encryption)\n"
+      "  \t[-e <encryption_type> | --encrypt <encryption_type>][aes256] "
+      "(optional - enables encryption with encryption_type)\n"
+      "  \t[-p <password> | --password <password>][default: aes256] (optional "
+      "- enables encryption with password)\n"
+      "  \t[-v | --verbose] (optional - enable verbose output)\n"
       "\n";
 
   const std::string shared_extract =
       " flatpack extract -i <archive_file> -o <output_folder>\n"
-      "  \t[-d <password> | --decrypt <password>] (optiona - enables "
-      "decryption)\n"
+      "  \t[-p <password> | --password <password>] (optional - enables "
+      "decryption with password)\n"
+      "  \t[-v | --verbose] (optional - enable verbose output)\n"
       "\n";
 
   const std::string help = " flatpack --help | -h\n";
@@ -58,7 +62,10 @@ int main(int argc, char *argv[]) {
   std::string input, output, password;
   flatpack_archive::CompressionType compression_type =
       flatpack_archive::CompressionType::None;
-  bool compress = false, encrypt = false, decrypt = false, help = false;
+  flatpack_archive::EncryptionType encryption_type =
+      flatpack_archive::EncryptionType::None;
+  bool compress = false, encrypt = false, decrypt = false, help = false,
+       verbose = false;
 
   auto show_help = [](std::string cmd) {
     print_usage(cmd);
@@ -74,14 +81,7 @@ int main(int argc, char *argv[]) {
          }
          input = argv[i];
        }},
-      {"--input",
-       [&](int &i) {
-         if (++i >= argc) {
-           std::cerr << "Missing argument for -i/--input\n";
-           std::exit(1);
-         }
-         input = argv[i];
-       }},
+      {"--input", [&](int &i) { handlers["-i"](i); }},
       {"-o",
        [&](int &i) {
          if (++i >= argc) {
@@ -90,26 +90,14 @@ int main(int argc, char *argv[]) {
          }
          output = argv[i];
        }},
-      {"--output",
-       [&](int &i) {
-         if (++i >= argc) {
-           std::cerr << "Missing argument for -o/--output\n";
-           std::exit(1);
-         }
-         output = argv[i];
-       }},
+      {"--output", [&](int &i) { handlers["-o"](i); }},
       {"-c",
-       [&](int &) {
+       [&](int &i) {
          compress = true;
          if (compression_type == flatpack_archive::CompressionType::None)
            compression_type = flatpack_archive::CompressionType::Default;
        }},
-      {"--compress",
-       [&](int &) {
-         compress = true;
-         if (compression_type == flatpack_archive::CompressionType::None)
-           compression_type = flatpack_archive::CompressionType::Default;
-       }},
+      {"--compress", [&](int &i) { handlers["-c"](i); }},
       {"-a",
        [&](int &i) {
          if (++i >= argc) {
@@ -119,51 +107,31 @@ int main(int argc, char *argv[]) {
          compress = true;
          compression_type = flatpack_archive::parse_compression_type(argv[i]);
        }},
-      {"--algo",
+      {"--algo", [&](int &i) { handlers["-a"](i); }},
+      {"-p",
        [&](int &i) {
          if (++i >= argc) {
-           std::cerr << "Missing argument for -a/--algo\n";
+           std::cerr << "Missing argument for -p/--password\n";
            std::exit(1);
          }
-         compress = true;
-         compression_type = flatpack_archive::parse_compression_type(argv[i]);
+         encrypt = true;
+         if (encryption_type == flatpack_archive::EncryptionType::None)
+           encryption_type = flatpack_archive::EncryptionType::Default;
+         password = argv[i];
        }},
+      {"--password", [&](int &i) { handlers["-p"](i); }},
       {"-e",
        [&](int &i) {
-         encrypt = true;
          if (++i >= argc) {
            std::cerr << "Missing argument for -e/--encrypt\n";
            std::exit(1);
          }
-         password = argv[i];
-       }},
-      {"--encrypt",
-       [&](int &i) {
          encrypt = true;
-         if (++i >= argc) {
-           std::cerr << "Missing argument for -e/--encrypt\n";
-           std::exit(1);
-         }
-         password = argv[i];
+         encryption_type = flatpack_archive::parse_encryption_type(argv[i]);
        }},
-      {"-d",
-       [&](int &i) {
-         decrypt = true;
-         if (++i >= argc) {
-           std::cerr << "Missing argument for -d/--decrypt\n";
-           std::exit(1);
-         }
-         password = argv[i];
-       }},
-      {"--decrypt",
-       [&](int &i) {
-         decrypt = true;
-         if (++i >= argc) {
-           std::cerr << "Missing argument for -d/--decrypt\n";
-           std::exit(1);
-         }
-         password = argv[i];
-       }},
+      {"--encrypt", [&](int &i) { handlers["-e"](i); }},
+      {"-v", [&](int &) { verbose = true; }},
+      {"--verbose", [&](int &) { verbose = true; }},
       {"-h", [&](int &) { help = true; }},
       {"--help", [&](int &) { help = true; }}};
 
@@ -184,15 +152,26 @@ int main(int argc, char *argv[]) {
       show_help("create");
       return 0;
     }
-    flatpack_archive::create_archive(input, output, compression_type);
-    std::cout << "Flatpack archive " << output << " created." << std::endl;
+    try {
+      flatpack_archive::create_archive(input, output, compression_type,
+                                       encryption_type, password, verbose);
+      std::cout << "Flatpack archive " << output << " created." << std::endl;
+    } catch (const std::exception &ex) {
+      std::cerr << "Error creating archive: " << ex.what() << std::endl;
+      return 1;
+    }
   } else if (command == "extract") {
     if (input.empty() || output.empty() || help) {
       show_help("extract");
       return 0;
     }
-    flatpack_archive::extract_archive(input, output);
-    std::cout << "Flatpack archive " << input << " extracted." << std::endl;
+    try {
+      flatpack_archive::extract_archive(input, output, password, verbose);
+      std::cout << "Flatpack archive " << input << " extracted." << std::endl;
+    } catch (const std::exception &ex) {
+      std::cerr << "Error extracting archive: " << ex.what() << std::endl;
+      return 1;
+    }
   }
   return 0;
 }

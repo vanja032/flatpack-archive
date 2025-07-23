@@ -11,19 +11,63 @@ Flatpack is a binary archive format that packages an entire directory tree—inc
  |_|    |_|\__,_|\__| .__/ \__,_|\___|_|\_\ /_/    \_\_|  \___|_| |_|_| \_/ \___|    |_|\___/ \___/|_|
                     | |
                     |_|
+```
 
-Usage:
+## Usage
 
- flatpack create -i <input_folder> -o <output_file>
+```
+flatpack create -i <input_folder> -o <output_file>
         [-c | --compress] [default: zlib]         (optional – enables compression)
         [-a <compression_type> | --algo <type>]   (optional – select: zlib/zstd/lz4/brotli)
-        [-e <password> | --encrypt <password>]    (optional – enables encryption)
+        [-e <encryption_type> | --encrypt <encryption_type>] (optional – enables encryption, e.g. aes256)
+        [-p <password> | --password <password>]   (optional – password for encryption)
+        [-v | --verbose]                          (optional – verbose output)
 
- flatpack extract -i <archive_file> -o <output_folder>
-        [-d <password> | --decrypt <password>]    (optional – enables decryption)
+flatpack extract -i <archive_file> -o <output_folder>
+        [-p <password> | --password <password>]   (optional – password for decryption)
+        [-v | --verbose]                          (optional – verbose output)
 
- flatpack --help | -h
+flatpack --help | -h
 ```
+
+### Option Details
+
+- `-i`, `--input` : Input folder (for create) or archive file (for extract) [required]
+- `-o`, `--output` : Output file (for create) or output folder (for extract) [required]
+- `-c`, `--compress` : Enable compression (default: zlib if not specified)
+- `-a`, `--algo` : Compression algorithm: `zlib`, `lz4`, `zstd`, `brotli`
+- `-e`, `--encrypt` : Encryption type (currently supported: `aes256`)
+- `-p`, `--password` : Password for encryption/decryption (required if using encryption)
+- `-v`, `--verbose` : Enable verbose output
+- `-h`, `--help` : Show help message
+
+### Examples
+
+Create an archive with default compression (zlib):
+
+```bash
+flatpack create -i ./my_folder -o backup.flatpack -c
+```
+
+Create an archive with Brotli compression and AES-256 encryption:
+
+```bash
+flatpack create -i ./my_folder -o backup.flatpack -a brotli -e aes256 -p mypassword
+```
+
+Extract an encrypted archive:
+
+```bash
+flatpack extract -i backup.flatpack -o ./restored_folder -p mypassword
+```
+
+Show help:
+
+```bash
+flatpack -h
+```
+
+## Archive Format Overview
 
 1. Header
 2. File Table
@@ -31,12 +75,11 @@ Usage:
 
 Each section is defined precisely below.
 
-## 1. Header
+### 1. Header
 
 The **Header** is a fixed-size block that appears at the beginning of the archive. It contains identity, format versioning, and metadata describing how many entries exist in the archive.
 
-### Layout
-
+**Header Layout**
 | Field           | Size (bytes) | Description                                     |
 | --------------- | ------------ | ----------------------------------------------- |
 | `magic`         | 6            | ASCII characters `"FPACK"` with `\0` terminator |
@@ -47,14 +90,11 @@ The **Header** is a fixed-size block that appears at the beginning of the archiv
 
 **Total Size: 13 bytes**
 
-The header is written first, before any other section, and its presence and contents help validate the archive format during extraction.
-
-## 2. File Table
+### 2. File Table
 
 The **File Table** is an array of fixed-size entries. Each entry corresponds to one file or directory in the archive. The entries are laid out back-to-back with no delimiters.
 
-### File Entry Layout
-
+**File Table Entry Layout**
 | Field              | Size (bytes) | Description                                                                            |
 | ------------------ | ------------ | -------------------------------------------------------------------------------------- |
 | `path`             | 256          | UTF-8 null-terminated relative path (zero-padded)                                      |
@@ -63,20 +103,19 @@ The **File Table** is an array of fixed-size entries. Each entry corresponds to 
 | `compressed_size`  | 8            | Compressed size of the file data                                                       |
 | `is_directory`     | 1            | Flag (1 = directory, 0 = file)                                                         |
 | `compression_type` | 1            | Compression type used (0 = None, 1 = Zlib, 2 = LZ4, 3 = Zstd, 4 = Brotli, 5 = Default) |
+| `encryption_type`  | 1            | Encryption type used (0 = None, 1 = AES256, 2 = Default)                               |
 
-**Total Per Entry: 282 bytes**
+**Total Per Entry: 283 bytes**
 
-Each file or folder is stored as a single entry in this section. Only file entries have valid `offset` and `size` fields. Directory entries do not reference any data in the raw data section.
-
-## 3. Raw Data Section
+### 3. Raw Data Section
 
 This section holds the binary contents of files. File data is written sequentially in the same order that the entries appear in the file table.
 
 - There are no delimiters or separators between file blocks.
 - Directories have no data stored.
-- Each file’s data can be found by seeking to `offset` and reading `size` bytes.
+- Each file’s data can be found by seeking to `offset` and reading `compressed_size` bytes (decompress and/or decrypt as needed).
 
-All raw data is stored as-is (uncompressed), unless future extensions change this.
+All raw data is stored as-is (uncompressed and unencrypted) unless compression and/or encryption is enabled.
 
 ## Storage Rules
 
@@ -88,8 +127,8 @@ All raw data is stored as-is (uncompressed), unless future extensions change thi
 
 The format is versioned and structured for forward compatibility. Future changes may include:
 
-- Compression flags or algorithms
-- Optional encryption using password-based keys
+- Additional compression algorithms
+- Additional encryption algorithms
 - Checksums or hash digests for integrity
 - Symbolic link or metadata support
 
@@ -129,25 +168,9 @@ This installs the `flatpack` binary to `/usr/local/bin`.
 
 ### Command-Line Usage
 
-To create an archive:
+See the usage section above for details and examples.
 
-```bash
-flatpack create -i ./my_folder -o backup.flatpack -a brotli -e mypassword
-```
-
-To extract an archive:
-
-```bash
-flatpack extract -i backup.flatpack -o ./restored_folder -d mypassword
-```
-
-For help:
-
-```bash
-flatpack --help
-```
-
-### Supported Compression Types
+## Supported Compression Types
 
 You can specify the compression algorithm using `--algo` or `-a`. The available options are:
 
@@ -157,6 +180,14 @@ You can specify the compression algorithm using `--algo` or `-a`. The available 
 - `brotli`
 
 If no compression algorithm is specified for compression, files are stored compressed using **Default** algorithm _Zlib_.
+
+## Supported Encryption Types
+
+You can specify the encryption algorithm using `--encrypt` or `-e`. The available options are:
+
+- `aes256`
+
+If no encryption algorithm is specified, encryption is not used by default.
 
 ## License
 

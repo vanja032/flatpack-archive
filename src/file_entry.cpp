@@ -14,6 +14,8 @@ void FileEntry::write(std::ofstream &out) const {
             sizeof(is_directory));
   out.write(reinterpret_cast<const char *>(&compression_type),
             sizeof(compression_type));
+  out.write(reinterpret_cast<const char *>(&encryption_type),
+            sizeof(encryption_type));
 }
 
 FileEntry FileEntry::read(std::ifstream &in) {
@@ -27,6 +29,8 @@ FileEntry FileEntry::read(std::ifstream &in) {
           sizeof(entry.is_directory));
   in.read(reinterpret_cast<char *>(&entry.compression_type),
           sizeof(entry.compression_type));
+  in.read(reinterpret_cast<char *>(&entry.encryption_type),
+          sizeof(entry.encryption_type));
 
   return entry;
 }

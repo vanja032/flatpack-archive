@@ -6,6 +6,9 @@ project(flatpack-archive
     LANGUAGES CXX
 )
 
+# Find OpenSSL
+find_package(OpenSSL REQUIRED)
+
 # Extract version parts
 set(FLATPACK_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(FLATPACK_VERSION_MINOR ${PROJECT_VERSION_MINOR})
@@ -26,6 +29,7 @@ add_library(flatpack_archive STATIC
     src/file_entry.cpp
     src/header.cpp
     src/compression.cpp
+    src/encryption.cpp
 )
 
 # Include directories (for public headers)
@@ -51,6 +55,7 @@ target_link_libraries(flatpack_archive
     brotlienc
     brotlidec
     brotlicommon
+    OpenSSL::Crypto
 )
 
 # Add test executable
@@ -82,4 +87,5 @@ target_link_libraries(flatpack_cli
     brotlienc
     brotlidec
     brotlicommon
+    OpenSSL::Crypto
 )

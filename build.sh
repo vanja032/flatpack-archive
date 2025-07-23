@@ -8,7 +8,7 @@ rm -rf build/*
 cd build
 
 # Configure project
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
 
 # Build project
 cmake --build . # > build_log.txt 2>&1

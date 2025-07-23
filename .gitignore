@@ -2,3 +2,4 @@
 build/
 resources/
 build_log.txt
+.cache/

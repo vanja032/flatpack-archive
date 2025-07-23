@@ -2,6 +2,7 @@
 #pragma once
 
 #include "compression.hpp"
+#include "flatpack_archive/encryption.hpp"
 
 #include <cstdint>
 #include <fstream>
@@ -15,6 +16,7 @@ struct FileEntry {
   uint64_t compressed_size = 0;
   uint8_t is_directory = 0;
   CompressionType compression_type = CompressionType::None;
+  EncryptionType encryption_type = EncryptionType::None;
 
   void write(std::ofstream &out) const;
 
